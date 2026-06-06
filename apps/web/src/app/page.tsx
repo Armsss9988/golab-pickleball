@@ -933,6 +933,11 @@ export default function App() {
     const koState = isMens ? tourneyState.mensKO : tourneyState.womensKO;
     const playerLimit = isMens ? 14 : 12;
 
+    const hasScoresEntered = 
+      (groupAMatches || []).some(m => m.s1 !== '' || m.s2 !== '') ||
+      (groupBMatches || []).some(m => m.s1 !== '' || m.s2 !== '') ||
+      (koState && Object.values(koState).some((m: any) => m && (m.s1 !== '' || m.s2 !== '')));
+
     if (!setupStatus) {
       const teamsKey = isMens ? 'mensTeams' : 'womensTeams';
       const teamsCount = isMens ? 7 : 6;
@@ -1222,7 +1227,22 @@ export default function App() {
           {role === 'admin' && (
             <div className="flex flex-wrap justify-center gap-2">
               <button onClick={() => generateAllNicknames(type)} disabled={isGeneratingNickname} className="text-sm bg-yellow-100 text-yellow-700 px-3 py-1.5 rounded-full font-bold flex items-center gap-1 hover:bg-yellow-200 shadow-sm"><Zap size={16}/> AI Biệt Danh</button>
-              <button onClick={() => updateStateAndSync({ [isMens?'mensSetup':'womensSetup']: false })} className={`text-sm px-3 py-1.5 rounded-full font-medium flex items-center gap-1 ${isMens ? 'text-blue-600 bg-blue-50' : 'text-pink-600 bg-pink-50'}`}><Settings2 size={16}/> Sửa DS</button>
+              {hasScoresEntered ? (
+                <button 
+                  onClick={() => showToast("Đã có điểm số ghi nhận, không thể sửa danh sách lúc này!")}
+                  className="text-sm px-3 py-1.5 rounded-full font-medium flex items-center gap-1 bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200 shadow-sm transition-all"
+                  title="Đã có điểm số ghi nhận, không thể sửa danh sách lúc này!"
+                >
+                  <Lock size={14} className="text-slate-400" /> Sửa DS
+                </button>
+              ) : (
+                <button 
+                  onClick={() => updateStateAndSync({ [isMens?'mensSetup':'womensSetup']: false })} 
+                  className={`text-sm px-3 py-1.5 rounded-full font-medium flex items-center gap-1 ${isMens ? 'text-blue-600 bg-blue-50 hover:bg-blue-100' : 'text-pink-600 bg-pink-50 hover:bg-pink-100'} transition-all cursor-pointer shadow-sm`}
+                >
+                  <Settings2 size={16}/> Sửa DS
+                </button>
+              )}
             </div>
           )}
         </div>
