@@ -736,46 +736,46 @@ export default function App() {
         };
 
         const t1Class = currentWinner === m.t1Idx 
-          ? "gold-glow px-2.5 py-1 rounded-lg border border-amber-300 shadow-sm"
+          ? "gold-glow border-amber-300 font-bold"
           : currentWinner === m.t2Idx
-            ? "opacity-45 line-through text-slate-400"
+            ? "opacity-45 line-through bg-slate-50 border-transparent text-slate-400"
             : role === 'admin' && hasScores
-              ? "text-slate-700 hover:text-amber-600 hover:font-bold cursor-pointer transition-colors"
-              : "text-slate-700";
+              ? "bg-slate-50 border-slate-200 hover:border-amber-400 cursor-pointer text-slate-700"
+              : "bg-slate-50 border-transparent text-slate-700";
 
         const t2Class = currentWinner === m.t2Idx 
-          ? "gold-glow px-2.5 py-1 rounded-lg border border-amber-300 shadow-sm"
+          ? "gold-glow border-amber-300 font-bold"
           : currentWinner === m.t1Idx
-            ? "opacity-45 line-through text-slate-400"
+            ? "opacity-45 line-through bg-slate-50 border-transparent text-slate-400"
             : role === 'admin' && hasScores
-              ? "text-slate-700 hover:text-amber-600 hover:font-bold cursor-pointer transition-colors"
-              : "text-slate-700";
+              ? "bg-slate-50 border-slate-200 hover:border-amber-400 cursor-pointer text-slate-700"
+              : "bg-slate-50 border-transparent text-slate-700";
 
         return (
           <div key={m.id} className="bg-white border p-3 rounded-xl flex flex-col gap-2 shadow-sm transition-all hover:shadow-md">
-            <div className="flex justify-between items-center gap-2">
+            <div className="flex flex-col gap-2">
+              {/* Đội 1 */}
               <div 
-                className={`flex-1 text-right text-xs sm:text-sm font-semibold truncate ${t1Class}`} 
-                title={teams[m.t1Idx]}
                 onClick={() => selectWinner(m.t1Idx)}
+                className={`flex items-center justify-between gap-3 px-3 py-2 rounded-xl border transition-all ${t1Class}`}
               >
-                {currentWinner === m.t1Idx && isConfirmed && "👑 "}
-                {teams[m.t1Idx]}
-              </div>
-
-              <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border shrink-0 font-mono">
+                <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                  {currentWinner === m.t1Idx && isConfirmed && "👑 "}
+                  <span className="text-xs sm:text-sm font-semibold truncate" title={teams[m.t1Idx]}>{teams[m.t1Idx]}</span>
+                </div>
                 <ScoreInput value={role !== 'admin' || isConfirmed ? (m.s1 === '' ? (m.s2 !== '' ? 0 : '') : m.s1) : m.s1} disabled={role !== 'admin' || isConfirmed} onChange={(val) => handleGroupScoreChange(type, group, m.id, 's1', val)} />
-                <span className="font-bold text-slate-400 select-none">-</span>
-                <ScoreInput value={role !== 'admin' || isConfirmed ? (m.s2 === '' ? (m.s1 !== '' ? 0 : '') : m.s2) : m.s2} disabled={role !== 'admin' || isConfirmed} onChange={(val) => handleGroupScoreChange(type, group, m.id, 's2', val)} />
               </div>
 
+              {/* Đội 2 */}
               <div 
-                className={`flex-1 text-left text-xs sm:text-sm font-semibold truncate ${t2Class}`} 
-                title={teams[m.t2Idx]}
                 onClick={() => selectWinner(m.t2Idx)}
+                className={`flex items-center justify-between gap-3 px-3 py-2 rounded-xl border transition-all ${t2Class}`}
               >
-                {teams[m.t2Idx]}
-                {currentWinner === m.t2Idx && isConfirmed && " 👑"}
+                <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                  {currentWinner === m.t2Idx && isConfirmed && "👑 "}
+                  <span className="text-xs sm:text-sm font-semibold truncate" title={teams[m.t2Idx]}>{teams[m.t2Idx]}</span>
+                </div>
+                <ScoreInput value={role !== 'admin' || isConfirmed ? (m.s2 === '' ? (m.s1 !== '' ? 0 : '') : m.s2) : m.s2} disabled={role !== 'admin' || isConfirmed} onChange={(val) => handleGroupScoreChange(type, group, m.id, 's2', val)} />
               </div>
             </div>
 
