@@ -1,0 +1,24 @@
+// ============================================================
+// GOLAB Pickleball Standalone — Prisma Schema (Minimal)
+// Chỉ dùng 1 bảng key_value_pairs để lưu trạng thái giải đấu
+// và refresh token của admin.
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Bảng đa năng: lưu trạng thái giải đấu pickleball + refresh tokens admin
+model KeyValuePair {
+  key       String   @id
+  value     String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("key_value_pairs")
+}

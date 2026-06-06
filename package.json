@@ -1,0 +1,16 @@
+{
+  "name": "golab-pickleball-standalone",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev:api": "pnpm --filter @pb/api run dev",
+    "dev:web": "pnpm --filter @pb/web run dev",
+    "build:api": "pnpm --filter @pb/api run build",
+    "build:web": "pnpm --filter @pb/web run build",
+    "start:api": "pnpm --filter @pb/api run start:prod",
+    "start:web": "pnpm --filter @pb/web run start"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}
