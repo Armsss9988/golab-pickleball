@@ -122,38 +122,6 @@ export default function App() {
     }, delay);
   }, []);
 
-  // ===== Auto-restore session from localStorage on mount =====
-  useEffect(() => {
-    const storedRefresh = getSafeLocal(REFRESH_TOKEN_KEY);
-    if (!storedRefresh) return;
-    // Try to get a new access token with the stored refresh token
-    (async () => {
-      try {
-        const res = await fetch('/api/pickleball-refresh', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken: storedRefresh }),
-        });
-        if (!res.ok) {
-          removeSafeLocal(REFRESH_TOKEN_KEY);
-          return;
-        }
-        const data = await res.json();
-        accessTokenRef.current = data.accessToken;
-        setSafeLocal(REFRESH_TOKEN_KEY, data.refreshToken);
-        setRole('admin');
-        try {
-          const payload = JSON.parse(atob(data.accessToken.split('.')[1]));
-          const expiresIn = (payload.exp * 1000) - Date.now();
-          scheduleTokenRefresh(expiresIn);
-        } catch {}
-      } catch (err) {
-        console.error('Auto-restore session failed:', err);
-        removeSafeLocal(REFRESH_TOKEN_KEY);
-      }
-    })();
-  }, [scheduleTokenRefresh]);
-
   const handleLogout = useCallback(async () => {
     const storedRefresh = getSafeLocal(REFRESH_TOKEN_KEY);
     if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
@@ -171,6 +139,63 @@ export default function App() {
     }
   }, []);
 
+  // ===== Central Auth fetch wrapper =====
+  const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}) => {
+    let token = accessTokenRef.current;
+    
+    const attachToken = (opts: RequestInit, tokenStr: string) => {
+      const headers = new Headers(opts.headers || {});
+      headers.set('Authorization', `Bearer ${tokenStr}`);
+      return { ...opts, headers };
+    };
+
+    let reqOptions = options;
+    if (token) {
+      reqOptions = attachToken(options, token);
+    }
+
+    let res = await fetch(url, reqOptions);
+
+    if (res.status === 401 && role === 'admin') {
+      const storedRefresh = getSafeLocal(REFRESH_TOKEN_KEY);
+      if (!storedRefresh) {
+        handleLogout();
+        throw new Error('Phiên đăng nhập đã hết hạn.');
+      }
+
+      try {
+        const refreshRes = await fetch('/api/pickleball-refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken: storedRefresh }),
+        });
+
+        if (!refreshRes.ok) {
+          handleLogout();
+          throw new Error('Phiên đăng nhập đã hết hạn.');
+        }
+
+        const data = await refreshRes.json();
+        accessTokenRef.current = data.accessToken;
+        setSafeLocal(REFRESH_TOKEN_KEY, data.refreshToken);
+        
+        try {
+          const payload = JSON.parse(atob(data.accessToken.split('.')[1]));
+          const expiresIn = (payload.exp * 1000) - Date.now();
+          scheduleTokenRefresh(expiresIn);
+        } catch {}
+
+        reqOptions = attachToken(options, data.accessToken);
+        res = await fetch(url, reqOptions);
+      } catch (err) {
+        handleLogout();
+        throw err;
+      }
+    }
+
+    return res;
+  }, [role, handleLogout, scheduleTokenRefresh]);
+
   // ================= TỰ ĐỘNG NHÚNG CSS CHO CODESANDBOX =================
   useEffect(() => {
     if (!document.getElementById('tailwind-script')) {
@@ -181,16 +206,44 @@ export default function App() {
     }
   }, []);
 
-  // 1. ĐỒNG BỘ DỮ LIỆU POSTGRESQL (GET/POST) VÀ POLLING CHO VIEWER
+  // ===== 1. Khởi tạo ứng dụng & Khôi phục phiên đăng nhập =====
   useEffect(() => {
     let isMounted = true;
-    const fetchState = async () => {
+    const initApp = async () => {
+      const storedRefresh = getSafeLocal(REFRESH_TOKEN_KEY);
+      if (storedRefresh) {
+        try {
+          const res = await fetch('/api/pickleball-refresh', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refreshToken: storedRefresh }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            accessTokenRef.current = data.accessToken;
+            setSafeLocal(REFRESH_TOKEN_KEY, data.refreshToken);
+            if (isMounted) setRole('admin');
+            try {
+              const payload = JSON.parse(atob(data.accessToken.split('.')[1]));
+              const expiresIn = (payload.exp * 1000) - Date.now();
+              scheduleTokenRefresh(expiresIn);
+            } catch {}
+          } else {
+            removeSafeLocal(REFRESH_TOKEN_KEY);
+          }
+        } catch (err) {
+          console.error('Auto-restore session failed:', err);
+          removeSafeLocal(REFRESH_TOKEN_KEY);
+        }
+      }
+
+      // Tải trạng thái giải đấu ban đầu
       try {
         const res = await fetch('/api/pickleball-state');
         const data = await res.json();
         if (isMounted && data) {
-          if(!data.mensKO) data.mensKO = generateDefaultState().mensKO;
-          if(!data.womensKO) data.womensKO = generateDefaultState().womensKO;
+          if (!data.mensKO) data.mensKO = generateDefaultState().mensKO;
+          if (!data.womensKO) data.womensKO = generateDefaultState().womensKO;
           setTourneyState(data);
         }
       } catch (err) {
@@ -200,14 +253,30 @@ export default function App() {
       }
     };
 
-    fetchState();
+    initApp();
+    return () => { isMounted = false; };
+  }, [scheduleTokenRefresh]);
 
-    const interval = setInterval(() => {
-      if (role === 'viewer') {
-        fetchState();
+  // ===== 2. Polling cập nhật cho Viewer =====
+  useEffect(() => {
+    if (role !== 'viewer') return;
+    let isMounted = true;
+
+    const fetchState = async () => {
+      try {
+        const res = await fetch('/api/pickleball-state');
+        const data = await res.json();
+        if (isMounted && data) {
+          if (!data.mensKO) data.mensKO = generateDefaultState().mensKO;
+          if (!data.womensKO) data.womensKO = generateDefaultState().womensKO;
+          setTourneyState(data);
+        }
+      } catch (err) {
+        console.error("Lỗi polling state:", err);
       }
-    }, 3000);
+    };
 
+    const interval = setInterval(fetchState, 3000);
     return () => {
       isMounted = false;
       clearInterval(interval);
@@ -216,33 +285,15 @@ export default function App() {
 
   const syncToCloud = async (newState) => {
     if (role !== 'admin') return;
-    const token = accessTokenRef.current;
-    if (!token) { showToast('Phiên đăng nhập hết hạn, đang làm mới...'); return; }
     try {
-      const res = await fetch('/api/pickleball-state', {
+      const res = await fetchWithAuth('/api/pickleball-state', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newState),
       });
-      if (res.status === 401) {
-        // Try refresh once
-        const storedRefresh = getSafeLocal(REFRESH_TOKEN_KEY);
-        if (!storedRefresh) { handleLogout(); return; }
-        const rRes = await fetch('/api/pickleball-refresh', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken: storedRefresh }),
-        });
-        if (!rRes.ok) { handleLogout(); return; }
-        const rData = await rRes.json();
-        accessTokenRef.current = rData.accessToken;
-        setSafeLocal(REFRESH_TOKEN_KEY, rData.refreshToken);
-        // Retry original request
-        await fetch('/api/pickleball-state', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${rData.accessToken}` },
-          body: JSON.stringify(newState),
-        });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        showToast(err.message || 'Lỗi đồng bộ dữ liệu.');
       }
     } catch (e) {
       console.error("Lỗi syncToCloud:", e);
@@ -276,7 +327,7 @@ export default function App() {
       const data = await res.json();
       accessTokenRef.current = data.accessToken;
       setSafeLocal(REFRESH_TOKEN_KEY, data.refreshToken);
-      // Schedule background refresh
+      
       try {
         const payload = JSON.parse(atob(data.accessToken.split('.')[1]));
         const expiresIn = (payload.exp * 1000) - Date.now();
