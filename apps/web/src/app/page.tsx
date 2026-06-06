@@ -47,6 +47,8 @@ const generateDefaultState = () => {
       "Dương Thảo - Phạm Hạnh", "Lim - Ngọc Hà", 
       "Hoàng Hiền - Đinh Tuyến", "Hạ Thu - Hồng Lê"
     ],
+    mensGroups: ["A", "A", "A", "B", "B", "B", "B"],
+    womensGroups: ["A", "A", "A", "B", "B", "B"],
     mensSetup: false, womensSetup: false,
     mensGroupA: [], mensGroupB: [], mensKO: { sf1: {s1:'', s2:''}, sf2: {s1:'', s2:''}, final: {s1:'', s2:''}, third: {s1:'', s2:''} },
     womensGroupA: [], womensGroupB: [], womensKO: { sf1: {s1:'', s2:''}, sf2: {s1:'', s2:''}, final: {s1:'', s2:''}, third: {s1:'', s2:''} },
@@ -379,14 +381,24 @@ export default function App() {
   const finalizeAndPair = (type) => {
     if (role !== 'admin') return;
     const setupKey = type === 'mens' ? 'mensSetup' : 'womensSetup';
+    const groupsKey = type === 'mens' ? 'mensGroups' : 'womensGroups';
     
+    const currentGroups = tourneyState[groupsKey] || (type === 'mens' ? ["A", "A", "A", "B", "B", "B", "B"] : ["A", "A", "A", "B", "B", "B"]);
+    
+    const groupAIndices: number[] = [];
+    const groupBIndices: number[] = [];
+    currentGroups.forEach((g, idx) => {
+      if (g === 'A') groupAIndices.push(idx);
+      else groupBIndices.push(idx);
+    });
+
     let updates = { [setupKey]: true };
     if (type === 'mens') {
-      updates.mensGroupA = generateMatchesForGroup([0, 1, 2], 'm_A');
-      updates.mensGroupB = generateMatchesForGroup([3, 4, 5, 6], 'm_B');
+      updates.mensGroupA = generateMatchesForGroup(groupAIndices, 'm_A');
+      updates.mensGroupB = generateMatchesForGroup(groupBIndices, 'm_B');
     } else {
-      updates.womensGroupA = generateMatchesForGroup([0, 1, 2], 'w_A');
-      updates.womensGroupB = generateMatchesForGroup([3, 4, 5], 'w_B');
+      updates.womensGroupA = generateMatchesForGroup(groupAIndices, 'w_A');
+      updates.womensGroupB = generateMatchesForGroup(groupBIndices, 'w_B');
     }
     
     updateStateAndSync(updates);
@@ -455,12 +467,36 @@ export default function App() {
     return { firstA, secondA, firstB, secondB, sf1Winner, sf1Loser, sf2Winner, sf2Loser, champion, thirdPlace };
   };
 
-  const mensStandingsA = useMemo(() => calculateStandings(tourneyState?.mensTeams, tourneyState?.mensGroupA, [0,1,2]), [tourneyState]);
-  const mensStandingsB = useMemo(() => calculateStandings(tourneyState?.mensTeams, tourneyState?.mensGroupB, [3,4,5,6]), [tourneyState]);
+  const mensStandingsA = useMemo(() => {
+    const indices: number[] = [];
+    const groups = tourneyState?.mensGroups || ["A", "A", "A", "B", "B", "B", "B"];
+    groups.forEach((g, idx) => { if (g === 'A') indices.push(idx); });
+    return calculateStandings(tourneyState?.mensTeams, tourneyState?.mensGroupA, indices);
+  }, [tourneyState]);
+
+  const mensStandingsB = useMemo(() => {
+    const indices: number[] = [];
+    const groups = tourneyState?.mensGroups || ["A", "A", "A", "B", "B", "B", "B"];
+    groups.forEach((g, idx) => { if (g === 'B') indices.push(idx); });
+    return calculateStandings(tourneyState?.mensTeams, tourneyState?.mensGroupB, indices);
+  }, [tourneyState]);
+
   const mensKOData = useMemo(() => calculateKnockoutLogic(tourneyState?.mensTeams, mensStandingsA, mensStandingsB, tourneyState?.mensKO || generateDefaultState().mensKO), [mensStandingsA, mensStandingsB, tourneyState]);
 
-  const womensStandingsA = useMemo(() => calculateStandings(tourneyState?.womensTeams, tourneyState?.womensGroupA, [0,1,2]), [tourneyState]);
-  const womensStandingsB = useMemo(() => calculateStandings(tourneyState?.womensTeams, tourneyState?.womensGroupB, [3,4,5]), [tourneyState]);
+  const womensStandingsA = useMemo(() => {
+    const indices: number[] = [];
+    const groups = tourneyState?.womensGroups || ["A", "A", "A", "B", "B", "B"];
+    groups.forEach((g, idx) => { if (g === 'A') indices.push(idx); });
+    return calculateStandings(tourneyState?.womensTeams, tourneyState?.womensGroupA, indices);
+  }, [tourneyState]);
+
+  const womensStandingsB = useMemo(() => {
+    const indices: number[] = [];
+    const groups = tourneyState?.womensGroups || ["A", "A", "A", "B", "B", "B"];
+    groups.forEach((g, idx) => { if (g === 'B') indices.push(idx); });
+    return calculateStandings(tourneyState?.womensTeams, tourneyState?.womensGroupB, indices);
+  }, [tourneyState]);
+
   const womensKOData = useMemo(() => calculateKnockoutLogic(tourneyState?.womensTeams, womensStandingsA, womensStandingsB, tourneyState?.womensKO || generateDefaultState().womensKO), [womensStandingsA, womensStandingsB, tourneyState]);
 
   // --- AI LOGIC ---
@@ -684,6 +720,16 @@ export default function App() {
         showToast("Đã lưu danh sách đội vào cơ sở dữ liệu!");
       };
 
+      const groupsKey = isMens ? 'mensGroups' : 'womensGroups';
+      const currentGroups = tourneyState[groupsKey] || (isMens ? ["A", "A", "A", "B", "B", "B", "B"] : ["A", "A", "A", "B", "B", "B"]);
+
+      const handleToggleGroup = (teamIndex: number, groupName: 'A' | 'B') => {
+        if (role !== 'admin') return;
+        const newGroups = [...currentGroups];
+        newGroups[teamIndex] = groupName;
+        updateStateAndSync({ [groupsKey]: newGroups });
+      };
+
       return (
         <div className="mx-auto animate-in fade-in space-y-6">
           <div className="flex flex-col sm:flex-row justify-between items-center border-b pb-3 gap-2">
@@ -759,7 +805,7 @@ export default function App() {
             {/* Cột 2: Tự Xếp Đội (Cặp Đôi) */}
             <div className="lg:col-span-7 space-y-3">
               <h3 className="font-bold text-sm text-slate-500 uppercase tracking-wider">
-                2. Cấu hình Đội Hình (Thả VĐV vào ô)
+                2. Cấu hình Đội Hình (Thả VĐV vào ô & Chọn bảng đấu)
               </h3>
               <div className="space-y-2">
                 {Array.from({ length: teamsCount }).map((_, idx) => {
@@ -767,6 +813,7 @@ export default function App() {
                   const [p1, p2] = teamStr.split(' - ').map(s => s.trim());
                   const hasP1 = p1 && p1 !== '---';
                   const hasP2 = p2 && p2 !== '---';
+                  const currentGroup = currentGroups?.[idx] || 'A';
 
                   return (
                     <div key={idx} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 p-3 bg-white border border-slate-200 rounded-xl shadow-sm">
@@ -825,6 +872,32 @@ export default function App() {
                           )}
                         </div>
                       </div>
+
+                      {/* Chọn bảng đấu */}
+                      <div className="flex items-center gap-1 border border-slate-200 rounded-xl bg-slate-50 p-1 shrink-0 select-none">
+                        <button
+                          disabled={role !== 'admin'}
+                          onClick={() => handleToggleGroup(idx, 'A')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
+                            currentGroup === 'A' 
+                              ? 'bg-blue-600 text-white shadow-sm' 
+                              : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          Bảng A
+                        </button>
+                        <button
+                          disabled={role !== 'admin'}
+                          onClick={() => handleToggleGroup(idx, 'B')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
+                            currentGroup === 'B' 
+                              ? 'bg-purple-600 text-white shadow-sm' 
+                              : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          Bảng B
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
@@ -860,12 +933,12 @@ export default function App() {
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 mb-12">
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-inner">
-            <GroupTable title="BẢNG A (3 Đội)" standings={groupAStandings} />
+            <GroupTable title={`BẢNG A (${groupAStandings.length} Đội)`} standings={groupAStandings} />
             <h4 className="font-bold text-slate-600 mb-2 mt-4 flex items-center gap-2"><PlayCircle size={16}/> Lịch đấu Bảng A</h4>
             <MatchList matches={groupAMatches} teams={teamsList} type={type} group="A" />
           </div>
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-inner">
-            <GroupTable title={`BẢNG B (${isMens ? '4' : '3'} Đội)`} standings={groupBStandings} />
+            <GroupTable title={`BẢNG B (${groupBStandings.length} Đội)`} standings={groupBStandings} />
             <h4 className="font-bold text-slate-600 mb-2 mt-4 flex items-center gap-2"><PlayCircle size={16}/> Lịch đấu Bảng B</h4>
             <MatchList matches={groupBMatches} teams={teamsList} type={type} group="B" />
           </div>
