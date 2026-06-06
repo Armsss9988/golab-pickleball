@@ -605,11 +605,57 @@ export default function App() {
       const teamsKey = isMens ? 'mensTeams' : 'womensTeams';
       const teamsCount = isMens ? 7 : 6;
 
-      const handleTeamChange = (index: number, value: string) => {
+      // Thu thập danh sách các VĐV đã được gán vào đội để highlight
+      const assignedPlayers = new Set<string>();
+      (tourneyState[teamsKey] || []).forEach((teamStr: string) => {
+        if (!teamStr) return;
+        teamStr.split(' - ').forEach(name => {
+          const trimmed = name.trim();
+          if (trimmed && trimmed !== '---') {
+            assignedPlayers.add(trimmed);
+          }
+        });
+      });
+
+      const handleDragStart = (e: React.DragEvent, playerName: string) => {
+        e.dataTransfer.setData('text/plain', playerName);
+      };
+
+      const handleDrop = (e: React.DragEvent, teamIndex: number, slotIndex: 1 | 2) => {
+        e.preventDefault();
         if (role !== 'admin') return;
+        const playerName = e.dataTransfer.getData('text/plain');
+        if (!playerName || !playerName.trim()) return;
+
+        const currentTeamStr = tourneyState[teamsKey]?.[teamIndex] || '';
+        let [p1, p2] = currentTeamStr.split(' - ').map(s => s.trim());
+        
+        if (slotIndex === 1) {
+          p1 = playerName;
+        } else {
+          p2 = playerName;
+        }
+
         const newTeams = [...(tourneyState[teamsKey] || [])];
         while (newTeams.length < teamsCount) newTeams.push('');
-        newTeams[index] = value;
+        newTeams[teamIndex] = `${p1 || '---'} - ${p2 || '---'}`;
+        updateStateAndSync({ [teamsKey]: newTeams });
+      };
+
+      const handleClearSlot = (teamIndex: number, slotIndex: 1 | 2) => {
+        if (role !== 'admin') return;
+        const currentTeamStr = tourneyState[teamsKey]?.[teamIndex] || '';
+        let [p1, p2] = currentTeamStr.split(' - ').map(s => s.trim());
+        
+        if (slotIndex === 1) {
+          p1 = '---';
+        } else {
+          p2 = '---';
+        }
+
+        const newTeams = [...(tourneyState[teamsKey] || [])];
+        while (newTeams.length < teamsCount) newTeams.push('');
+        newTeams[teamIndex] = `${p1 || '---'} - ${p2 || '---'}`;
         updateStateAndSync({ [teamsKey]: newTeams });
       };
 
@@ -660,24 +706,39 @@ export default function App() {
             {/* Cột 1: Danh sách VĐV */}
             <div className="lg:col-span-5 space-y-3">
               <h3 className="font-bold text-sm text-slate-500 uppercase tracking-wider">
-                1. Danh sách VĐV Đăng ký ({playerLimit} người)
+                1. Kéo thả VĐV ({playerLimit} người)
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {(tourneyState[playersKey] || []).map((player: string, idx: number) => (
-                  <div key={idx} className="flex items-center gap-2 p-1.5 border rounded-lg bg-slate-50 border-slate-200">
-                    <span className={`w-5 h-5 flex justify-center items-center rounded-full font-bold text-xs shrink-0 ${isMens ? 'bg-blue-100 text-blue-700' : 'bg-pink-100 text-pink-700'}`}>
-                      {idx + 1}
-                    </span>
-                    <input
-                      type="text"
-                      value={player || ''}
-                      onChange={(e) => handlePlayerChange(type, idx, e.target.value)}
-                      disabled={role !== 'admin'}
-                      className="flex-1 w-full bg-transparent border-none text-xs font-semibold focus:outline-none text-slate-800"
-                      placeholder={`VĐV ${idx + 1}`}
-                    />
-                  </div>
-                ))}
+                {(tourneyState[playersKey] || []).map((player: string, idx: number) => {
+                  const isAssigned = player && player.trim() && assignedPlayers.has(player.trim());
+                  return (
+                    <div 
+                      key={idx} 
+                      draggable={role === 'admin' && !!player.trim()}
+                      onDragStart={(e) => handleDragStart(e, player)}
+                      className={`flex items-center gap-2 p-2 border rounded-xl shadow-sm transition-all select-none ${
+                        role === 'admin' && player.trim() ? 'cursor-grab active:cursor-grabbing hover:border-slate-300' : ''
+                      } ${isAssigned ? 'bg-slate-100 border-slate-200 opacity-60' : 'bg-white border-slate-200'}`}
+                    >
+                      <span className={`w-5 h-5 flex justify-center items-center rounded-full font-bold text-[10px] shrink-0 ${isMens ? 'bg-blue-100 text-blue-700' : 'bg-pink-100 text-pink-700'}`}>
+                        {idx + 1}
+                      </span>
+                      <input
+                        type="text"
+                        value={player || ''}
+                        onChange={(e) => handlePlayerChange(type, idx, e.target.value)}
+                        disabled={role !== 'admin'}
+                        className="flex-1 w-full bg-transparent border-none text-xs font-bold focus:outline-none text-slate-800"
+                        placeholder={`VĐV ${idx + 1}`}
+                      />
+                      {isAssigned && (
+                        <span className="text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full font-black uppercase tracking-wider shrink-0 select-none">
+                          Đã xếp
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
               {role === 'admin' && (
                 <button
@@ -692,22 +753,75 @@ export default function App() {
             {/* Cột 2: Tự Xếp Đội (Cặp Đôi) */}
             <div className="lg:col-span-7 space-y-3">
               <h3 className="font-bold text-sm text-slate-500 uppercase tracking-wider">
-                2. Cấu hình Đội Hình (Tự xếp cặp đôi)
+                2. Cấu hình Đội Hình (Thả VĐV vào ô)
               </h3>
               <div className="space-y-2">
-                {Array.from({ length: teamsCount }).map((_, idx) => (
-                  <div key={idx} className="flex items-center gap-3 p-2 bg-white border border-slate-200 rounded-xl shadow-sm">
-                    <span className="font-bold text-xs text-slate-400 w-12 shrink-0">Đội {idx + 1}:</span>
-                    <input
-                      type="text"
-                      value={tourneyState[teamsKey]?.[idx] || ''}
-                      onChange={(e) => handleTeamChange(idx, e.target.value)}
-                      disabled={role !== 'admin'}
-                      className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold focus:bg-white focus:border-indigo-500 outline-none text-slate-800"
-                      placeholder={`Ví dụ: VĐV A - VĐV B`}
-                    />
-                  </div>
-                ))}
+                {Array.from({ length: teamsCount }).map((_, idx) => {
+                  const teamStr = tourneyState[teamsKey]?.[idx] || '';
+                  const [p1, p2] = teamStr.split(' - ').map(s => s.trim());
+                  const hasP1 = p1 && p1 !== '---';
+                  const hasP2 = p2 && p2 !== '---';
+
+                  return (
+                    <div key={idx} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 p-3 bg-white border border-slate-200 rounded-xl shadow-sm">
+                      <div className="font-bold text-xs text-slate-500 min-w-[50px] flex items-center shrink-0">
+                        Đội {idx + 1}
+                      </div>
+                      
+                      <div className="flex-1 grid grid-cols-2 gap-3">
+                        {/* Slot Player 1 */}
+                        <div 
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={(e) => handleDrop(e, idx, 1)}
+                          className={`relative flex items-center justify-between px-3 py-2 border rounded-xl text-xs transition-all ${
+                            hasP1 
+                              ? 'bg-slate-50 border-slate-200 font-bold text-slate-800' 
+                              : 'bg-slate-50/50 border-slate-200 border-dashed text-slate-400 font-medium'
+                          }`}
+                          style={{ borderStyle: hasP1 ? 'solid' : 'dashed' }}
+                        >
+                          <span className="truncate flex-1 pr-4">
+                            {hasP1 ? p1 : 'Thả VĐV 1 vào đây...'}
+                          </span>
+                          {hasP1 && role === 'admin' && (
+                            <button 
+                              onClick={() => handleClearSlot(idx, 1)}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500 transition-colors p-1"
+                              title="Gỡ cầu thủ"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Slot Player 2 */}
+                        <div 
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={(e) => handleDrop(e, idx, 2)}
+                          className={`relative flex items-center justify-between px-3 py-2 border rounded-xl text-xs transition-all ${
+                            hasP2 
+                              ? 'bg-slate-50 border-slate-200 font-bold text-slate-800' 
+                              : 'bg-slate-50/50 border-slate-200 border-dashed text-slate-400 font-medium'
+                          }`}
+                          style={{ borderStyle: hasP2 ? 'solid' : 'dashed' }}
+                        >
+                          <span className="truncate flex-1 pr-4">
+                            {hasP2 ? p2 : 'Thả VĐV 2 vào đây...'}
+                          </span>
+                          {hasP2 && role === 'admin' && (
+                            <button 
+                              onClick={() => handleClearSlot(idx, 2)}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500 transition-colors p-1"
+                              title="Gỡ cầu thủ"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
