@@ -550,18 +550,20 @@ export default function App() {
     let stats = teamIndicesInGroup.map(idx => ({ index: idx, name: teams[idx], played: 0, wins: 0, losses: 0, pointDiff: 0, points: 0 }));
     
     matches.forEach(m => {
-      if (m.confirmed && m.s1 !== '' && m.s2 !== '') {
+      if (m.confirmed && (m.s1 !== '' || m.s2 !== '')) {
         const t1Stat = stats.find(s => s.index === m.t1Idx);
         const t2Stat = stats.find(s => s.index === m.t2Idx);
         if(t1Stat && t2Stat) {
           t1Stat.played++; t2Stat.played++;
-          let diff = m.s1 - m.s2;
+          const score1 = m.s1 === '' ? 0 : Number(m.s1);
+          const score2 = m.s2 === '' ? 0 : Number(m.s2);
+          let diff = score1 - score2;
           t1Stat.pointDiff += diff; t2Stat.pointDiff -= diff;
           if (m.winnerIdx === m.t1Idx) { t1Stat.wins++; t1Stat.points++; t2Stat.losses++; }
           else if (m.winnerIdx === m.t2Idx) { t2Stat.wins++; t2Stat.points++; t1Stat.losses++; }
           else {
-            if (m.s1 > m.s2) { t1Stat.wins++; t1Stat.points++; t2Stat.losses++; }
-            else if (m.s1 < m.s2) { t2Stat.wins++; t2Stat.points++; t1Stat.losses++; }
+            if (score1 > score2) { t1Stat.wins++; t1Stat.points++; t2Stat.losses++; }
+            else if (score1 < score2) { t2Stat.wins++; t2Stat.points++; t1Stat.losses++; }
           }
         }
       }
@@ -696,7 +698,7 @@ export default function App() {
       {matches.map((m, idx) => {
         const isConfirmed = m.confirmed;
         const currentWinner = isConfirmed ? m.winnerIdx : pendingGroupWinners[m.id];
-        const hasScores = m.s1 !== '' && m.s2 !== '';
+        const hasScores = m.s1 !== '' || m.s2 !== '';
 
         const selectWinner = (winnerIdx) => {
           if (role !== 'admin' || isConfirmed || !hasScores) return;
@@ -732,9 +734,9 @@ export default function App() {
               </div>
 
               <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border shrink-0 font-mono">
-                <ScoreInput value={m.s1} disabled={role !== 'admin' || isConfirmed} onChange={(val) => handleGroupScoreChange(type, group, m.id, 's1', val)} />
+                <ScoreInput value={role !== 'admin' || isConfirmed ? (m.s1 === '' ? (m.s2 !== '' ? 0 : '') : m.s1) : m.s1} disabled={role !== 'admin' || isConfirmed} onChange={(val) => handleGroupScoreChange(type, group, m.id, 's1', val)} />
                 <span className="font-bold text-slate-400 select-none">-</span>
-                <ScoreInput value={m.s2} disabled={role !== 'admin' || isConfirmed} onChange={(val) => handleGroupScoreChange(type, group, m.id, 's2', val)} />
+                <ScoreInput value={role !== 'admin' || isConfirmed ? (m.s2 === '' ? (m.s1 !== '' ? 0 : '') : m.s2) : m.s2} disabled={role !== 'admin' || isConfirmed} onChange={(val) => handleGroupScoreChange(type, group, m.id, 's2', val)} />
               </div>
 
               <div 
@@ -796,7 +798,7 @@ export default function App() {
     const koState = type === 'mens' ? tourneyState.mensKO : tourneyState.womensKO;
     const isConfirmed = koState?.[matchKey]?.confirmed;
     const currentWinner = isConfirmed ? koState?.[matchKey]?.winner : pendingKOWinners[`${type}_${matchKey}`];
-    const hasScores = s1 !== '' && s2 !== '';
+    const hasScores = s1 !== '' || s2 !== '';
 
     const selectWinner = (winnerName, loserName) => {
       if (role !== 'admin' || isConfirmed || !hasScores || !winnerName) return;
@@ -839,7 +841,7 @@ export default function App() {
         >
           {currentWinner === t1 && t1 && isConfirmed && "👑 "}
           <div className="flex-1 text-xs sm:text-sm truncate font-semibold">{t1 || 'Chưa xác định'}</div>
-          <ScoreInput value={s1} disabled={role !== 'admin' || isConfirmed || !t1} onChange={val => handleKOScoreChange(type, matchKey, 's1', val)} />
+          <ScoreInput value={role !== 'admin' || isConfirmed ? (s1 === '' ? (s2 !== '' ? 0 : '') : s1) : s1} disabled={role !== 'admin' || isConfirmed || !t1} onChange={val => handleKOScoreChange(type, matchKey, 's1', val)} />
         </div>
 
         <div 
@@ -848,7 +850,7 @@ export default function App() {
         >
           {currentWinner === t2 && t2 && isConfirmed && "👑 "}
           <div className="flex-1 text-xs sm:text-sm truncate font-semibold">{t2 || 'Chưa xác định'}</div>
-          <ScoreInput value={s2} disabled={role !== 'admin' || isConfirmed || !t2} onChange={val => handleKOScoreChange(type, matchKey, 's2', val)} />
+          <ScoreInput value={role !== 'admin' || isConfirmed ? (s2 === '' ? (s1 !== '' ? 0 : '') : s2) : s2} disabled={role !== 'admin' || isConfirmed || !t2} onChange={val => handleKOScoreChange(type, matchKey, 's2', val)} />
         </div>
 
         {role === 'admin' && (t1 || t2) && (
