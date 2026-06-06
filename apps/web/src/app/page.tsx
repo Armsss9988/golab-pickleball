@@ -437,9 +437,70 @@ export default function App() {
   const handlePlayerChange = (type, index, value) => {
     if (role !== 'admin') return;
     const playersKey = type === 'mens' ? 'mensPlayers' : 'womensPlayers';
+    const teamsKey = type === 'mens' ? 'mensTeams' : 'womensTeams';
+    
+    const oldName = (tourneyState[playersKey] || [])[index];
     const newPlayers = [...(tourneyState[playersKey] || [])];
     newPlayers[index] = value;
+    
+    let updates: any = { [playersKey]: newPlayers };
+
+    // Tự động cập nhật tên trong danh sách đội nếu có trùng khớp
+    if (oldName && oldName.trim() && oldName !== '---') {
+      const newTeams = (tourneyState[teamsKey] || []).map((teamStr: string) => {
+        if (!teamStr) return teamStr;
+        const parts = teamStr.split(' - ').map(s => s.trim());
+        if (parts.length === 2) {
+          let [p1, p2] = parts;
+          if (p1 === oldName.trim()) p1 = value.trim() || '---';
+          if (p2 === oldName.trim()) p2 = value.trim() || '---';
+          return `${p1} - ${p2}`;
+        }
+        return teamStr;
+      });
+      updates[teamsKey] = newTeams;
+    }
+
+    updateStateAndSync(updates);
+  };
+
+  const handleDeletePlayer = (type, index) => {
+    if (role !== 'admin') return;
+    const playersKey = type === 'mens' ? 'mensPlayers' : 'womensPlayers';
+    const teamsKey = type === 'mens' ? 'mensTeams' : 'womensTeams';
+    
+    const playerName = (tourneyState[playersKey] || [])[index];
+    const newPlayers = (tourneyState[playersKey] || []).filter((_, idx) => idx !== index);
+    
+    let updates: any = { [playersKey]: newPlayers };
+
+    // Tự động gỡ cầu thủ khỏi đội hình nếu bị xóa
+    if (playerName && playerName.trim() && playerName !== '---') {
+      const newTeams = (tourneyState[teamsKey] || []).map((teamStr: string) => {
+        if (!teamStr) return teamStr;
+        const parts = teamStr.split(' - ').map(s => s.trim());
+        if (parts.length === 2) {
+          let [p1, p2] = parts;
+          if (p1 === playerName.trim()) p1 = '---';
+          if (p2 === playerName.trim()) p2 = '---';
+          return `${p1} - ${p2}`;
+        }
+        return teamStr;
+      });
+      updates[teamsKey] = newTeams;
+    }
+
+    updateStateAndSync(updates);
+    showToast("Đã xóa VĐV!");
+  };
+
+  const handleAddPlayer = (type) => {
+    if (role !== 'admin') return;
+    const playersKey = type === 'mens' ? 'mensPlayers' : 'womensPlayers';
+    const newPlayers = [...(tourneyState[playersKey] || [])];
+    newPlayers.push(`VĐV ${newPlayers.length + 1}`);
     updateStateAndSync({ [playersKey]: newPlayers });
+    showToast("Đã thêm VĐV mới!");
   };
 
   const finalizeAndPair = (type) => {
@@ -447,7 +508,16 @@ export default function App() {
     const setupKey = type === 'mens' ? 'mensSetup' : 'womensSetup';
     const groupsKey = type === 'mens' ? 'mensGroups' : 'womensGroups';
     
-    const currentGroups = tourneyState[groupsKey] || (type === 'mens' ? ["A", "A", "A", "B", "B", "B", "B"] : ["A", "A", "A", "B", "B", "B"]);
+    const playersKey = type === 'mens' ? 'mensPlayers' : 'womensPlayers';
+    const teamsCount = Math.max(1, Math.ceil((tourneyState[playersKey] || []).length / 2));
+    
+    let currentGroups = [...(tourneyState[groupsKey] || [])];
+    while (currentGroups.length < teamsCount) {
+      currentGroups.push(currentGroups.length % 2 === 0 ? 'A' : 'B');
+    }
+    if (currentGroups.length > teamsCount) {
+      currentGroups = currentGroups.slice(0, teamsCount);
+    }
     
     const groupAIndices: number[] = [];
     const groupBIndices: number[] = [];
@@ -858,7 +928,7 @@ export default function App() {
           ? "bg-slate-50 border-slate-200 hover:border-amber-400 cursor-pointer"
           : "bg-slate-50 border-transparent";
 
-    const containerClass = customClass || "bg-white border rounded-2xl shadow-md p-3.5 w-full sm:w-64 flex flex-col gap-2.5 relative overflow-hidden transition-all hover:shadow-lg";
+    const containerClass = customClass || "bg-white border rounded-2xl shadow-md p-3.5 w-full sm:w-72 flex flex-col gap-2.5 relative overflow-hidden transition-all hover:shadow-lg";
 
     return (
       <div className={containerClass}>
@@ -867,20 +937,32 @@ export default function App() {
         
         <div 
           onClick={() => selectWinner(t1, t2)}
-          className={`flex items-center gap-2 rounded-xl px-3 py-2 border transition-all ${t1Class}`}
+          className={`flex flex-col gap-1.5 rounded-xl p-2.5 border transition-all ${t1Class}`}
         >
-          {currentWinner === t1 && t1 && isConfirmed && "👑 "}
-          <div className="flex-1 text-xs sm:text-sm truncate font-semibold">{t1 || 'Chưa xác định'}</div>
-          <ScoreInput value={role !== 'admin' || isConfirmed ? (s1 === '' ? (s2 !== '' ? 0 : '') : s1) : s1} disabled={role !== 'admin' || isConfirmed || !t1} onChange={val => handleKOScoreChange(type, matchKey, 's1', val)} />
+          <div className="flex items-center gap-1.5 min-w-0 w-full">
+            {currentWinner === t1 && t1 && isConfirmed && "👑 "}
+            <div className="flex-1 text-xs sm:text-sm font-semibold break-words leading-tight">{t1 || 'Chưa xác định'}</div>
+          </div>
+          {t1 && (
+            <div className="flex justify-end w-full mt-0.5">
+              <ScoreInput value={role !== 'admin' || isConfirmed ? (s1 === '' ? (s2 !== '' ? 0 : '') : s1) : s1} disabled={role !== 'admin' || isConfirmed || !t1} onChange={val => handleKOScoreChange(type, matchKey, 's1', val)} />
+            </div>
+          )}
         </div>
 
         <div 
           onClick={() => selectWinner(t2, t1)}
-          className={`flex items-center gap-2 rounded-xl px-3 py-2 border transition-all ${t2Class}`}
+          className={`flex flex-col gap-1.5 rounded-xl p-2.5 border transition-all ${t2Class}`}
         >
-          {currentWinner === t2 && t2 && isConfirmed && "👑 "}
-          <div className="flex-1 text-xs sm:text-sm truncate font-semibold">{t2 || 'Chưa xác định'}</div>
-          <ScoreInput value={role !== 'admin' || isConfirmed ? (s2 === '' ? (s1 !== '' ? 0 : '') : s2) : s2} disabled={role !== 'admin' || isConfirmed || !t2} onChange={val => handleKOScoreChange(type, matchKey, 's2', val)} />
+          <div className="flex items-center gap-1.5 min-w-0 w-full">
+            {currentWinner === t2 && t2 && isConfirmed && "👑 "}
+            <div className="flex-1 text-xs sm:text-sm font-semibold break-words leading-tight">{t2 || 'Chưa xác định'}</div>
+          </div>
+          {t2 && (
+            <div className="flex justify-end w-full mt-0.5">
+              <ScoreInput value={role !== 'admin' || isConfirmed ? (s2 === '' ? (s1 !== '' ? 0 : '') : s2) : s2} disabled={role !== 'admin' || isConfirmed || !t2} onChange={val => handleKOScoreChange(type, matchKey, 's2', val)} />
+            </div>
+          )}
         </div>
 
         {role === 'admin' && (t1 || t2) && (
@@ -978,7 +1060,7 @@ export default function App() {
 
     if (!setupStatus) {
       const teamsKey = isMens ? 'mensTeams' : 'womensTeams';
-      const teamsCount = isMens ? 7 : 6;
+      const teamsCount = Math.max(1, Math.ceil((tourneyState[playersKey] || []).length / 2));
 
       // Thu thập danh sách các VĐV đã được gán vào đội để highlight
       const assignedPlayers = new Set<string>();
@@ -1097,7 +1179,7 @@ export default function App() {
             {/* Cột 1: Danh sách VĐV */}
             <div className="lg:col-span-5 space-y-3">
               <h3 className="font-bold text-sm text-slate-500 uppercase tracking-wider">
-                1. Kéo thả VĐV ({playerLimit} người)
+                1. Kéo thả VĐV ({(tourneyState[playersKey] || []).length} người)
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {(tourneyState[playersKey] || []).map((player: string, idx: number) => {
@@ -1127,17 +1209,34 @@ export default function App() {
                           Đã xếp
                         </span>
                       )}
+                      {role === 'admin' && (
+                        <button 
+                          onClick={() => handleDeletePlayer(type, idx)}
+                          className="text-slate-300 hover:text-red-500 transition-colors px-1 text-xs shrink-0 cursor-pointer font-bold"
+                          title="Xóa VĐV"
+                        >
+                          ✕
+                        </button>
+                      )}
                     </div>
                   );
                 })}
               </div>
               {role === 'admin' && (
-                <button
-                  onClick={() => executeInstantShuffle(type)}
-                  className="w-full text-xs bg-amber-500 hover:bg-amber-600 text-white py-2 rounded-lg font-bold flex justify-center items-center gap-1 transition-all cursor-pointer"
-                >
-                  <Shuffle size={14} /> Xáo Trộn Danh Sách VĐV
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleAddPlayer(type)}
+                    className="flex-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg font-bold flex justify-center items-center gap-1 transition-all cursor-pointer shadow-sm"
+                  >
+                    + Thêm VĐV
+                  </button>
+                  <button
+                    onClick={() => executeInstantShuffle(type)}
+                    className="flex-1 text-xs bg-amber-500 hover:bg-amber-600 text-white py-2 rounded-lg font-bold flex justify-center items-center gap-1 transition-all cursor-pointer shadow-sm"
+                  >
+                    <Shuffle size={14} /> Xáo Trộn
+                  </button>
+                </div>
               )}
             </div>
 
@@ -1319,7 +1418,7 @@ export default function App() {
                   w={koData.champion} 
                   matchKey="final" 
                   type={type} 
-                  customClass="bg-gradient-to-b from-yellow-50/70 to-white border-2 border-yellow-400 rounded-2xl p-4 w-full sm:w-64 flex flex-col gap-3 shadow-xl relative overflow-hidden transition-all hover:shadow-2xl hover:scale-102"
+                  customClass="bg-gradient-to-b from-yellow-50/70 to-white border-2 border-yellow-400 rounded-2xl p-4 w-full sm:w-72 flex flex-col gap-3 shadow-xl relative overflow-hidden transition-all hover:shadow-2xl hover:scale-102"
                 />
                 {koData.champion && (
                   <div className="p-2.5 bg-gradient-to-r from-yellow-500 via-amber-500 to-yellow-600 text-white rounded-xl font-black shadow-lg text-xs sm:text-sm text-center uppercase animate-pulse tracking-wide border border-yellow-400 select-none">
@@ -1337,7 +1436,7 @@ export default function App() {
                 w={koData.thirdPlace} 
                 matchKey="third" 
                 type={type} 
-                customClass="bg-gradient-to-b from-orange-50/70 to-white border-2 border-orange-300 rounded-2xl p-4 w-full sm:w-64 flex flex-col gap-3 shadow-md relative overflow-hidden transition-all hover:shadow-lg hover:scale-102"
+                customClass="bg-gradient-to-b from-orange-50/70 to-white border-2 border-orange-300 rounded-2xl p-4 w-full sm:w-72 flex flex-col gap-3 shadow-md relative overflow-hidden transition-all hover:shadow-lg hover:scale-102"
               />
             </div>
           </div>
