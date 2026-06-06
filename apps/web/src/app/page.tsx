@@ -569,9 +569,15 @@ export default function App() {
     return stats.sort((a, b) => b.points !== a.points ? b.points - a.points : b.pointDiff !== a.pointDiff ? b.pointDiff - a.pointDiff : a.name.localeCompare(b.name));
   };
 
-  const calculateKnockoutLogic = (teams, groupAStats, groupBStats, koState) => {
-    const firstA = groupAStats[0]?.name; const secondA = groupAStats[1]?.name;
-    const firstB = groupBStats[0]?.name; const secondB = groupBStats[1]?.name;
+  const calculateKnockoutLogic = (teams, groupAStats, groupBStats, koState, groupAMatches, groupBMatches) => {
+    const isGroupAAllConfirmed = groupAMatches && groupAMatches.length > 0 && groupAMatches.every(m => m.confirmed);
+    const isGroupBAllConfirmed = groupBMatches && groupBMatches.length > 0 && groupBMatches.every(m => m.confirmed);
+
+    const firstA = isGroupAAllConfirmed ? groupAStats[0]?.name : null;
+    const secondA = isGroupAAllConfirmed ? groupAStats[1]?.name : null;
+    const firstB = isGroupBAllConfirmed ? groupBStats[0]?.name : null;
+    const secondB = isGroupBAllConfirmed ? groupBStats[1]?.name : null;
+    
     let sf1Winner = null, sf1Loser = null, sf2Winner = null, sf2Loser = null, champion = null, thirdPlace = null;
     
     if(koState?.sf1?.confirmed) {
@@ -605,7 +611,7 @@ export default function App() {
     return calculateStandings(tourneyState?.mensTeams, tourneyState?.mensGroupB, indices);
   }, [tourneyState]);
 
-  const mensKOData = useMemo(() => calculateKnockoutLogic(tourneyState?.mensTeams, mensStandingsA, mensStandingsB, tourneyState?.mensKO || generateDefaultState().mensKO), [mensStandingsA, mensStandingsB, tourneyState]);
+  const mensKOData = useMemo(() => calculateKnockoutLogic(tourneyState?.mensTeams, mensStandingsA, mensStandingsB, tourneyState?.mensKO || generateDefaultState().mensKO, tourneyState?.mensGroupA, tourneyState?.mensGroupB), [mensStandingsA, mensStandingsB, tourneyState]);
 
   const womensStandingsA = useMemo(() => {
     const indices: number[] = [];
@@ -621,7 +627,7 @@ export default function App() {
     return calculateStandings(tourneyState?.womensTeams, tourneyState?.womensGroupB, indices);
   }, [tourneyState]);
 
-  const womensKOData = useMemo(() => calculateKnockoutLogic(tourneyState?.womensTeams, womensStandingsA, womensStandingsB, tourneyState?.womensKO || generateDefaultState().womensKO), [womensStandingsA, womensStandingsB, tourneyState]);
+  const womensKOData = useMemo(() => calculateKnockoutLogic(tourneyState?.womensTeams, womensStandingsA, womensStandingsB, tourneyState?.womensKO || generateDefaultState().womensKO, tourneyState?.womensGroupA, tourneyState?.womensGroupB), [womensStandingsA, womensStandingsB, tourneyState]);
 
   // --- AI LOGIC ---
   const callGeminiAPI = async (prompt) => {
