@@ -145,6 +145,9 @@ export default function App() {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
+  const [pendingGroupWinners, setPendingGroupWinners] = useState<Record<string, number>>({});
+  const [pendingKOWinners, setPendingKOWinners] = useState<Record<string, string>>({});
+
   // AI States
   const [geminiApiKey, setGeminiApiKey] = useState(getSafeLocal('gemini_api_key'));
   const [aiCommentary, setAiCommentary] = useState('');
@@ -489,21 +492,77 @@ export default function App() {
     });
   };
 
+  const handleGroupWinnerConfirm = (type: string, group: string, matchId: string, winnerIdx: number) => {
+    if (role !== 'admin') return;
+    const key = type === 'mens' ? (group === 'A' ? 'mensGroupA' : 'mensGroupB') : (group === 'A' ? 'womensGroupA' : 'womensGroupB');
+    setTourneyState(prev => {
+      const newMatches = (prev[key] || []).map(m => m.id === matchId ? { ...m, confirmed: true, winnerIdx } : m);
+      const newState = { ...prev, [key]: newMatches };
+      syncToCloud(newState); return newState;
+    });
+    setPendingGroupWinners(prev => {
+      const copy = { ...prev };
+      delete copy[matchId];
+      return copy;
+    });
+  };
+
+  const handleGroupWinnerUnlock = (type: string, group: string, matchId: string) => {
+    if (role !== 'admin') return;
+    const key = type === 'mens' ? (group === 'A' ? 'mensGroupA' : 'mensGroupB') : (group === 'A' ? 'womensGroupA' : 'womensGroupB');
+    setTourneyState(prev => {
+      const newMatches = (prev[key] || []).map(m => m.id === matchId ? { ...m, confirmed: false, winnerIdx: undefined } : m);
+      const newState = { ...prev, [key]: newMatches };
+      syncToCloud(newState); return newState;
+    });
+  };
+
+  const handleKOWinnerConfirm = (type: string, matchKey: string, winnerName: string, loserName: string) => {
+    if (role !== 'admin') return;
+    const key = type === 'mens' ? 'mensKO' : 'womensKO';
+    setTourneyState(prev => {
+      const newKO = { ...prev[key] };
+      newKO[matchKey] = { ...newKO[matchKey], confirmed: true, winner: winnerName, loser: loserName };
+      const newState = { ...prev, [key]: newKO };
+      syncToCloud(newState); return newState;
+    });
+    setPendingKOWinners(prev => {
+      const copy = { ...prev };
+      delete copy[`${type}_${matchKey}`];
+      return copy;
+    });
+  };
+
+  const handleKOWinnerUnlock = (type: string, matchKey: string) => {
+    if (role !== 'admin') return;
+    const key = type === 'mens' ? 'mensKO' : 'womensKO';
+    setTourneyState(prev => {
+      const newKO = { ...prev[key] };
+      newKO[matchKey] = { ...newKO[matchKey], confirmed: false, winner: undefined, loser: undefined };
+      const newState = { ...prev, [key]: newKO };
+      syncToCloud(newState); return newState;
+    });
+  };
+
   // --- TÍNH TOÁN BẢNG XẾP HẠNG & ĐẨY NHÁNH TỰ ĐỘNG ---
   const calculateStandings = (teams, matches, teamIndicesInGroup) => {
     if (!teams || !matches) return [];
     let stats = teamIndicesInGroup.map(idx => ({ index: idx, name: teams[idx], played: 0, wins: 0, losses: 0, pointDiff: 0, points: 0 }));
     
     matches.forEach(m => {
-      if (m.s1 !== '' && m.s2 !== '') {
+      if (m.confirmed && m.s1 !== '' && m.s2 !== '') {
         const t1Stat = stats.find(s => s.index === m.t1Idx);
         const t2Stat = stats.find(s => s.index === m.t2Idx);
         if(t1Stat && t2Stat) {
           t1Stat.played++; t2Stat.played++;
           let diff = m.s1 - m.s2;
           t1Stat.pointDiff += diff; t2Stat.pointDiff -= diff;
-          if (m.s1 > m.s2) { t1Stat.wins++; t1Stat.points++; t2Stat.losses++; }
-          else if (m.s1 < m.s2) { t2Stat.wins++; t2Stat.points++; t1Stat.losses++; }
+          if (m.winnerIdx === m.t1Idx) { t1Stat.wins++; t1Stat.points++; t2Stat.losses++; }
+          else if (m.winnerIdx === m.t2Idx) { t2Stat.wins++; t2Stat.points++; t1Stat.losses++; }
+          else {
+            if (m.s1 > m.s2) { t1Stat.wins++; t1Stat.points++; t2Stat.losses++; }
+            else if (m.s1 < m.s2) { t2Stat.wins++; t2Stat.points++; t1Stat.losses++; }
+          }
         }
       }
     });
@@ -515,16 +574,20 @@ export default function App() {
     const firstB = groupBStats[0]?.name; const secondB = groupBStats[1]?.name;
     let sf1Winner = null, sf1Loser = null, sf2Winner = null, sf2Loser = null, champion = null, thirdPlace = null;
     
-    if(koState.sf1.s1 !== '' && koState.sf1.s2 !== '') {
-        if(koState.sf1.s1 > koState.sf1.s2) { sf1Winner = firstA; sf1Loser = secondB; }
-        else if(koState.sf1.s2 > koState.sf1.s1) { sf1Winner = secondB; sf1Loser = firstA; }
+    if(koState?.sf1?.confirmed) {
+        sf1Winner = koState.sf1.winner;
+        sf1Loser = koState.sf1.loser;
     }
-    if(koState.sf2.s1 !== '' && koState.sf2.s2 !== '') {
-        if(koState.sf2.s1 > koState.sf2.s2) { sf2Winner = firstB; sf2Loser = secondA; }
-        else if(koState.sf2.s2 > koState.sf2.s1) { sf2Winner = secondA; sf2Loser = firstB; }
+    if(koState?.sf2?.confirmed) {
+        sf2Winner = koState.sf2.winner;
+        sf2Loser = koState.sf2.loser;
     }
-    if(koState.final.s1 !== '' && koState.final.s2 !== '') { champion = koState.final.s1 > koState.final.s2 ? sf1Winner : (koState.final.s2 > koState.final.s1 ? sf2Winner : null); }
-    if(koState.third.s1 !== '' && koState.third.s2 !== '') { thirdPlace = koState.third.s1 > koState.third.s2 ? sf1Loser : (koState.third.s2 > koState.third.s1 ? sf2Loser : null); }
+    if(koState?.final?.confirmed) {
+        champion = koState.final.winner;
+    }
+    if(koState?.third?.confirmed) {
+        thirdPlace = koState.third.winner;
+    }
     return { firstA, secondA, firstB, secondB, sf1Winner, sf1Loser, sf2Winner, sf2Loser, champion, thirdPlace };
   };
 
@@ -624,34 +687,206 @@ export default function App() {
 
   const MatchList = ({ matches, teams, type, group }) => (
     <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar mb-6">
-      {matches.map((m, idx) => (
-        <div key={m.id} className="bg-white border p-2 rounded-lg flex justify-between items-center gap-1 shadow-sm">
-          <div className="flex-1 text-right text-xs sm:text-sm font-medium truncate text-slate-700" title={teams[m.t1Idx]}>{teams[m.t1Idx]}</div>
-          <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border shrink-0">
-            <ScoreInput value={m.s1} disabled={role !== 'admin'} onChange={(val) => handleGroupScoreChange(type, group, m.id, 's1', val)} />
-            <span className="font-bold text-slate-400 select-none">-</span>
-            <ScoreInput value={m.s2} disabled={role !== 'admin'} onChange={(val) => handleGroupScoreChange(type, group, m.id, 's2', val)} />
+      {matches.map((m, idx) => {
+        const isConfirmed = m.confirmed;
+        const currentWinner = isConfirmed ? m.winnerIdx : pendingGroupWinners[m.id];
+        const hasScores = m.s1 !== '' && m.s2 !== '';
+
+        const selectWinner = (winnerIdx) => {
+          if (role !== 'admin' || isConfirmed || !hasScores) return;
+          setPendingGroupWinners(prev => ({ ...prev, [m.id]: winnerIdx }));
+        };
+
+        const t1Class = currentWinner === m.t1Idx 
+          ? "gold-glow px-2.5 py-1 rounded-lg border border-amber-300 shadow-sm"
+          : currentWinner === m.t2Idx
+            ? "opacity-45 line-through text-slate-400"
+            : role === 'admin' && hasScores
+              ? "text-slate-700 hover:text-amber-600 hover:font-bold cursor-pointer transition-colors"
+              : "text-slate-700";
+
+        const t2Class = currentWinner === m.t2Idx 
+          ? "gold-glow px-2.5 py-1 rounded-lg border border-amber-300 shadow-sm"
+          : currentWinner === m.t1Idx
+            ? "opacity-45 line-through text-slate-400"
+            : role === 'admin' && hasScores
+              ? "text-slate-700 hover:text-amber-600 hover:font-bold cursor-pointer transition-colors"
+              : "text-slate-700";
+
+        return (
+          <div key={m.id} className="bg-white border p-3 rounded-xl flex flex-col gap-2 shadow-sm transition-all hover:shadow-md">
+            <div className="flex justify-between items-center gap-2">
+              <div 
+                className={`flex-1 text-right text-xs sm:text-sm font-semibold truncate ${t1Class}`} 
+                title={teams[m.t1Idx]}
+                onClick={() => selectWinner(m.t1Idx)}
+              >
+                {currentWinner === m.t1Idx && isConfirmed && "👑 "}
+                {teams[m.t1Idx]}
+              </div>
+
+              <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border shrink-0 font-mono">
+                <ScoreInput value={m.s1} disabled={role !== 'admin' || isConfirmed} onChange={(val) => handleGroupScoreChange(type, group, m.id, 's1', val)} />
+                <span className="font-bold text-slate-400 select-none">-</span>
+                <ScoreInput value={m.s2} disabled={role !== 'admin' || isConfirmed} onChange={(val) => handleGroupScoreChange(type, group, m.id, 's2', val)} />
+              </div>
+
+              <div 
+                className={`flex-1 text-left text-xs sm:text-sm font-semibold truncate ${t2Class}`} 
+                title={teams[m.t2Idx]}
+                onClick={() => selectWinner(m.t2Idx)}
+              >
+                {teams[m.t2Idx]}
+                {currentWinner === m.t2Idx && isConfirmed && " 👑"}
+              </div>
+            </div>
+
+            {role === 'admin' && (
+              <div className="flex justify-end gap-2 items-center border-t border-slate-50 pt-1.5 mt-0.5 animate-in fade-in">
+                {!isConfirmed && pendingGroupWinners[m.id] !== undefined && (
+                  <div className="flex gap-1.5 items-center w-full justify-between animate-in slide-in-from-top-2">
+                    <span className="text-[10px] font-bold text-amber-600">Xác nhận đội thắng?</span>
+                    <div className="flex gap-1.5">
+                      <button 
+                        onClick={() => handleGroupWinnerConfirm(type, group, m.id, pendingGroupWinners[m.id])} 
+                        className="text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1 px-3 rounded-lg shadow-sm cursor-pointer transition-all active:scale-95"
+                      >
+                        Xác nhận
+                      </button>
+                      <button 
+                        onClick={() => setPendingGroupWinners(prev => { const copy = { ...prev }; delete copy[m.id]; return copy; })} 
+                        className="text-[10px] bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-1 px-2.5 rounded-lg cursor-pointer transition-all"
+                      >
+                        Hủy
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {!isConfirmed && pendingGroupWinners[m.id] === undefined && hasScores && (
+                  <span className="text-[10px] text-slate-400 italic font-medium w-full text-right">Click tên đội thắng để xác nhận</span>
+                )}
+
+                {isConfirmed && (
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-[10px] font-black uppercase text-amber-600 tracking-wider flex items-center gap-1 select-none">🏆 Đã chốt</span>
+                    <button 
+                      onClick={() => handleGroupWinnerUnlock(type, group, m.id)} 
+                      className="text-[10px] bg-slate-100 hover:bg-amber-100 border hover:border-amber-300 text-slate-600 hover:text-amber-800 font-bold py-1 px-2.5 rounded-lg transition-all cursor-pointer flex items-center gap-1 active:scale-95"
+                    >
+                      <RotateCcw size={10}/> Sửa kết quả
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-          <div className="flex-1 text-left text-xs sm:text-sm font-medium truncate text-slate-700" title={teams[m.t2Idx]}>{teams[m.t2Idx]}</div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 
-  const KnockoutBox = ({ title, t1, t2, s1, s2, w, matchKey, type }) => (
-    <div className="bg-white border rounded-lg shadow-md p-3 w-full sm:w-60 flex flex-col gap-2 relative overflow-hidden">
-      <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-blue-500 to-purple-500"></div>
-      <div className="text-xs font-bold text-slate-500 uppercase ml-2">{title}</div>
-      <div className={`flex items-center gap-2 rounded px-2 py-1.5 border ml-2 ${w === t1 && t1 ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-transparent'}`}>
-        <div className={`flex-1 text-xs sm:text-sm truncate ${w === t1 && t1 ? 'font-bold text-green-700' : 'text-slate-700'}`} title={t1}>{t1 || 'Nhất Bảng A'}</div>
-        <ScoreInput value={s1} disabled={role !== 'admin' || !t1} onChange={(val) => handleKOScoreChange(type, matchKey, 's1', val)} />
+  const KnockoutBox = ({ title, t1, t2, s1, s2, w, matchKey, type, customClass }) => {
+    const koState = type === 'mens' ? tourneyState.mensKO : tourneyState.womensKO;
+    const isConfirmed = koState?.[matchKey]?.confirmed;
+    const currentWinner = isConfirmed ? koState?.[matchKey]?.winner : pendingKOWinners[`${type}_${matchKey}`];
+    const hasScores = s1 !== '' && s2 !== '';
+
+    const selectWinner = (winnerName, loserName) => {
+      if (role !== 'admin' || isConfirmed || !hasScores || !winnerName) return;
+      setPendingKOWinners(prev => ({ ...prev, [`${type}_${matchKey}`]: winnerName }));
+    };
+
+    const confirmWinner = () => {
+      const pendingWinner = pendingKOWinners[`${type}_${matchKey}`];
+      if (!pendingWinner) return;
+      const loser = pendingWinner === t1 ? t2 : t1;
+      handleKOWinnerConfirm(type, matchKey, pendingWinner, loser);
+    };
+
+    const t1Class = currentWinner === t1 && t1
+      ? "gold-glow border-amber-300 font-bold"
+      : currentWinner && currentWinner !== t1
+        ? "opacity-45 line-through bg-slate-50 border-transparent text-slate-400"
+        : role === 'admin' && hasScores && t1
+          ? "bg-slate-50 border-slate-200 hover:border-amber-400 cursor-pointer"
+          : "bg-slate-50 border-transparent";
+
+    const t2Class = currentWinner === t2 && t2
+      ? "gold-glow border-amber-300 font-bold"
+      : currentWinner && currentWinner !== t2
+        ? "opacity-45 line-through bg-slate-50 border-transparent text-slate-400"
+        : role === 'admin' && hasScores && t2
+          ? "bg-slate-50 border-slate-200 hover:border-amber-400 cursor-pointer"
+          : "bg-slate-50 border-transparent";
+
+    const containerClass = customClass || "bg-white border rounded-2xl shadow-md p-3.5 w-full sm:w-64 flex flex-col gap-2.5 relative overflow-hidden transition-all hover:shadow-lg";
+
+    return (
+      <div className={containerClass}>
+        <div className={`absolute top-0 left-0 w-1 h-full ${matchKey === 'final' ? 'bg-yellow-500' : matchKey === 'third' ? 'bg-orange-500' : 'bg-gradient-to-b from-blue-500 to-purple-500'}`}></div>
+        <div className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-wider">{title}</div>
+        
+        <div 
+          onClick={() => selectWinner(t1, t2)}
+          className={`flex items-center gap-2 rounded-xl px-3 py-2 border transition-all ${t1Class}`}
+        >
+          {currentWinner === t1 && t1 && isConfirmed && "👑 "}
+          <div className="flex-1 text-xs sm:text-sm truncate font-semibold">{t1 || 'Chưa xác định'}</div>
+          <ScoreInput value={s1} disabled={role !== 'admin' || isConfirmed || !t1} onChange={val => handleKOScoreChange(type, matchKey, 's1', val)} />
+        </div>
+
+        <div 
+          onClick={() => selectWinner(t2, t1)}
+          className={`flex items-center gap-2 rounded-xl px-3 py-2 border transition-all ${t2Class}`}
+        >
+          {currentWinner === t2 && t2 && isConfirmed && "👑 "}
+          <div className="flex-1 text-xs sm:text-sm truncate font-semibold">{t2 || 'Chưa xác định'}</div>
+          <ScoreInput value={s2} disabled={role !== 'admin' || isConfirmed || !t2} onChange={val => handleKOScoreChange(type, matchKey, 's2', val)} />
+        </div>
+
+        {role === 'admin' && (t1 || t2) && (
+          <div className="flex justify-end gap-1.5 items-center border-t border-slate-50 pt-2 mt-1 w-full font-mono">
+            {!isConfirmed && pendingKOWinners[`${type}_${matchKey}`] !== undefined && (
+              <div className="flex gap-1.5 items-center w-full justify-between animate-in slide-in-from-top-2">
+                <span className="text-[9px] font-bold text-amber-600">Chốt thắng?</span>
+                <div className="flex gap-1.5">
+                  <button 
+                    onClick={confirmWinner} 
+                    className="text-[9px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1 px-2.5 rounded-lg shadow-sm cursor-pointer transition-all active:scale-95"
+                  >
+                    Chốt
+                  </button>
+                  <button 
+                    onClick={() => setPendingKOWinners(prev => { const copy = { ...prev }; delete copy[`${type}_${matchKey}`]; return copy; })} 
+                    className="text-[9px] bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-1 px-2 rounded-lg cursor-pointer transition-all"
+                  >
+                    Hủy
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {!isConfirmed && pendingKOWinners[`${type}_${matchKey}`] === undefined && hasScores && (
+              <span className="text-[9px] text-slate-400 italic font-medium w-full text-right">Click tên đội thắng để xác nhận</span>
+            )}
+
+            {isConfirmed && (
+              <div className="flex items-center justify-between w-full">
+                <span className="text-[9px] font-black uppercase text-amber-600 tracking-wider flex items-center gap-1 select-none">🏆 Chốt</span>
+                <button 
+                  onClick={() => handleKOWinnerUnlock(type, matchKey)} 
+                  className="text-[9px] bg-slate-100 hover:bg-amber-100 border hover:border-amber-300 text-slate-600 hover:text-amber-800 font-bold py-1 px-2 rounded-lg transition-all cursor-pointer flex items-center gap-1 active:scale-95"
+                >
+                  <RotateCcw size={8}/> Sửa
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
-      <div className={`flex items-center gap-2 rounded px-2 py-1.5 border ml-2 ${w === t2 && t2 ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-transparent'}`}>
-        <div className={`flex-1 text-xs sm:text-sm truncate ${w === t2 && t2 ? 'font-bold text-green-700' : 'text-slate-700'}`} title={t2}>{t2 || 'Nhì Bảng B'}</div>
-        <ScoreInput value={s2} disabled={role !== 'admin' || !t2} onChange={(val) => handleKOScoreChange(type, matchKey, 's2', val)} />
-      </div>
-    </div>
-  );
+    );
+  };
 
   // ================= MAIN RENDER =================
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-purple-700" size={48} /></div>;
@@ -1016,30 +1251,36 @@ export default function App() {
             </div>
 
             <div className="flex flex-col justify-center gap-8">
-              <div className="bg-gradient-to-b from-yellow-50 to-white border-2 border-yellow-400 rounded-xl p-4 w-full sm:w-64 shadow-xl">
-                <div className="text-center font-black text-yellow-800 uppercase mb-3 flex items-center justify-center gap-2"><Trophy size={20} className="text-yellow-600"/> CHUNG KẾT</div>
-                <div className={`flex items-center gap-2 rounded px-2 py-2 border mb-2 ${koData.champion === koData.sf1Winner && koData.champion ? 'bg-yellow-100 border-yellow-400' : 'bg-gray-50 border-gray-200'}`}>
-                  <div className={`flex-1 text-xs sm:text-sm truncate ${koData.champion === koData.sf1Winner && koData.champion ? 'font-bold text-yellow-800' : 'text-gray-700'}`} title={koData.sf1Winner}>{koData.sf1Winner || 'Thắng BK1'}</div>
-                  <ScoreInput value={koState.final.s1} disabled={role !== 'admin' || !koData.sf1Winner} onChange={(val) => handleKOScoreChange(type, 'final', 's1', val)} />
-                </div>
-                <div className={`flex items-center gap-2 rounded px-2 py-2 border ${koData.champion === koData.sf2Winner && koData.champion ? 'bg-yellow-100 border-yellow-400' : 'bg-gray-50 border-gray-200'}`}>
-                  <div className={`flex-1 text-xs sm:text-sm truncate ${koData.champion === koData.sf2Winner && koData.champion ? 'font-bold text-yellow-800' : 'text-gray-700'}`} title={koData.sf2Winner}>{koData.sf2Winner || 'Thắng BK2'}</div>
-                  <ScoreInput value={koState.final.s2} disabled={role !== 'admin' || !koData.sf2Winner} onChange={(val) => handleKOScoreChange(type, 'final', 's2', val)} />
-                </div>
-                {koData.champion && <div className="mt-4 p-2 bg-gradient-to-r from-yellow-400 to-yellow-600 text-white rounded-lg font-black shadow-md text-sm text-center uppercase animate-pulse">🏆 VÔ ĐỊCH: {koData.champion}</div>}
+              <div className="flex flex-col gap-2">
+                <KnockoutBox 
+                  title="🏆 CHUNG KẾT" 
+                  t1={koData.sf1Winner} 
+                  t2={koData.sf2Winner} 
+                  s1={koState.final.s1} 
+                  s2={koState.final.s2} 
+                  w={koData.champion} 
+                  matchKey="final" 
+                  type={type} 
+                  customClass="bg-gradient-to-b from-yellow-50/70 to-white border-2 border-yellow-400 rounded-2xl p-4 w-full sm:w-64 flex flex-col gap-3 shadow-xl relative overflow-hidden transition-all hover:shadow-2xl hover:scale-102"
+                />
+                {koData.champion && (
+                  <div className="p-2.5 bg-gradient-to-r from-yellow-500 via-amber-500 to-yellow-600 text-white rounded-xl font-black shadow-lg text-xs sm:text-sm text-center uppercase animate-pulse tracking-wide border border-yellow-400 select-none">
+                    🏆 VÔ ĐỊCH: {koData.champion}
+                  </div>
+                )}
               </div>
 
-              <div className="bg-gradient-to-b from-orange-50 to-white border-2 border-orange-300 rounded-xl p-4 w-full sm:w-64 shadow-md">
-                <div className="text-center font-bold text-orange-800 uppercase mb-3 flex items-center justify-center gap-2"><Medal size={20} className="text-orange-600"/> Tranh Hạng 3</div>
-                <div className={`flex items-center gap-2 rounded px-2 py-1.5 border mb-2 ${koData.thirdPlace === koData.sf1Loser && koData.thirdPlace ? 'bg-orange-100 border-orange-300' : 'bg-gray-50 border-gray-200'}`}>
-                  <div className={`flex-1 text-xs sm:text-sm truncate ${koData.thirdPlace === koData.sf1Loser && koData.thirdPlace ? 'font-bold text-orange-800' : 'text-gray-700'}`} title={koData.sf1Loser}>{koData.sf1Loser || 'Thua BK1'}</div>
-                  <ScoreInput value={koState.third.s1} disabled={role !== 'admin' || !koData.sf1Loser} onChange={(val) => handleKOScoreChange(type, 'third', 's1', val)} />
-                </div>
-                <div className={`flex items-center gap-2 rounded px-2 py-1.5 border ${koData.thirdPlace === koData.sf2Loser && koData.thirdPlace ? 'bg-orange-100 border-orange-300' : 'bg-gray-50 border-gray-200'}`}>
-                  <div className={`flex-1 text-xs sm:text-sm truncate ${koData.thirdPlace === koData.sf2Loser && koData.thirdPlace ? 'font-bold text-orange-800' : 'text-gray-700'}`} title={koData.sf2Loser}>{koData.sf2Loser || 'Thua BK2'}</div>
-                  <ScoreInput value={koState.third.s2} disabled={role !== 'admin' || !koData.sf2Loser} onChange={(val) => handleKOScoreChange(type, 'third', 's2', val)} />
-                </div>
-              </div>
+              <KnockoutBox 
+                title="🥉 Tranh Hạng 3" 
+                t1={koData.sf1Loser} 
+                t2={koData.sf2Loser} 
+                s1={koState.third.s1} 
+                s2={koState.third.s2} 
+                w={koData.thirdPlace} 
+                matchKey="third" 
+                type={type} 
+                customClass="bg-gradient-to-b from-orange-50/70 to-white border-2 border-orange-300 rounded-2xl p-4 w-full sm:w-64 flex flex-col gap-3 shadow-md relative overflow-hidden transition-all hover:shadow-lg hover:scale-102"
+              />
             </div>
           </div>
         </div>
