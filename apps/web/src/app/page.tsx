@@ -692,7 +692,7 @@ export default function App() {
   );
 
   const MatchList = ({ matches, teams, type, group }) => (
-    <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar mb-6">
+    <div className="space-y-2 mb-6">
       {matches.map((m, idx) => {
         const isConfirmed = m.confirmed;
         const currentWinner = isConfirmed ? m.winnerIdx : pendingGroupWinners[m.id];
