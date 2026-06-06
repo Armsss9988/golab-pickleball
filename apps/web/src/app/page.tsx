@@ -627,6 +627,12 @@ export default function App() {
         const playerName = e.dataTransfer.getData('text/plain');
         if (!playerName || !playerName.trim()) return;
 
+        // Kiểm tra xem VĐV đã được xếp vào đội khác chưa
+        if (assignedPlayers.has(playerName.trim())) {
+          showToast(`VĐV "${playerName}" đã được xếp vào đội hình. Vui lòng gỡ ra trước khi xếp lại!`);
+          return;
+        }
+
         const currentTeamStr = tourneyState[teamsKey]?.[teamIndex] || '';
         let [p1, p2] = currentTeamStr.split(' - ').map(s => s.trim());
         
