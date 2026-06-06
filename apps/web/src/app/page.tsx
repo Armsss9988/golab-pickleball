@@ -568,7 +568,37 @@ export default function App() {
         }
       }
     });
-    return stats.sort((a, b) => b.points !== a.points ? b.points - a.points : b.pointDiff !== a.pointDiff ? b.pointDiff - a.pointDiff : a.name.localeCompare(b.name));
+    return stats.sort((a, b) => {
+      // 1. Số trận thắng
+      if (b.points !== a.points) {
+        return b.points - a.points;
+      }
+      // 2. Hiệu số điểm thắng/thua
+      if (b.pointDiff !== a.pointDiff) {
+        return b.pointDiff - a.pointDiff;
+      }
+      // 3. Đối đầu trực tiếp (Head-to-head)
+      const h2hMatch = matches.find(m => 
+        m.confirmed && 
+        ((m.t1Idx === a.index && m.t2Idx === b.index) || (m.t1Idx === b.index && m.t2Idx === a.index))
+      );
+      if (h2hMatch) {
+        if (h2hMatch.winnerIdx === a.index) return -1;
+        if (h2hMatch.winnerIdx === b.index) return 1;
+        
+        const score1 = h2hMatch.s1 === '' ? 0 : Number(h2hMatch.s1);
+        const score2 = h2hMatch.s2 === '' ? 0 : Number(h2hMatch.s2);
+        if (h2hMatch.t1Idx === a.index) {
+          if (score1 > score2) return -1;
+          if (score1 < score2) return 1;
+        } else {
+          if (score2 > score1) return -1;
+          if (score2 < score1) return 1;
+        }
+      }
+      // 4. Fallback alphabetical
+      return a.name.localeCompare(b.name);
+    });
   };
 
   const calculateKnockoutLogic = (teams, groupAStats, groupBStats, koState, groupAMatches, groupBMatches) => {
