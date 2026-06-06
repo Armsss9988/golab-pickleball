@@ -67,6 +67,67 @@ const GolabLogo = () => (
   </svg>
 );
 
+interface ScoreInputProps {
+  value: string | number;
+  onChange: (val: string) => void;
+  disabled?: boolean;
+}
+
+const ScoreInput: React.FC<ScoreInputProps> = ({ value, onChange, disabled }) => {
+  const displayVal = value === undefined || value === null ? '' : value;
+  
+  const handleIncrement = () => {
+    const current = displayVal === '' ? 0 : Number(displayVal);
+    onChange(Math.max(0, current + 1).toString());
+  };
+
+  const handleDecrement = () => {
+    const current = displayVal === '' ? 0 : Number(displayVal);
+    onChange(Math.max(0, current - 1).toString());
+  };
+
+  if (disabled) {
+    return (
+      <span className="w-8 sm:w-10 text-center font-black text-slate-700 text-sm sm:text-base py-0.5 bg-slate-100 rounded-lg border border-slate-200/60 inline-block select-none font-mono">
+        {displayVal !== '' ? displayVal : '-'}
+      </span>
+    );
+  }
+
+  return (
+    <div className="flex items-center border border-slate-200 rounded-lg bg-white p-0.5 shadow-sm shrink-0 select-none">
+      <button
+        type="button"
+        onClick={handleDecrement}
+        className="w-6 h-6 flex items-center justify-center bg-slate-50 hover:bg-red-50 hover:text-red-600 text-slate-400 rounded-md font-bold text-sm transition-all duration-150 active:scale-95 cursor-pointer"
+      >
+        -
+      </button>
+      <input
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        value={displayVal}
+        onChange={(e) => {
+          const val = e.target.value;
+          if (val === '' || /^\d+$/.test(val)) {
+            onChange(val);
+          }
+        }}
+        className="w-7 h-6 text-center font-mono font-black text-xs sm:text-sm focus:outline-none text-slate-800"
+        placeholder="0"
+      />
+      <button
+        type="button"
+        onClick={handleIncrement}
+        className="w-6 h-6 flex items-center justify-center bg-slate-50 hover:bg-emerald-50 hover:text-emerald-600 text-slate-400 rounded-md font-bold text-sm transition-all duration-150 active:scale-95 cursor-pointer"
+      >
+        +
+      </button>
+    </div>
+  );
+};
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null); 
@@ -565,13 +626,13 @@ export default function App() {
     <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar mb-6">
       {matches.map((m, idx) => (
         <div key={m.id} className="bg-white border p-2 rounded-lg flex justify-between items-center gap-1 shadow-sm">
-          <div className="flex-1 text-right text-xs sm:text-sm font-medium truncate" title={teams[m.t1Idx]}>{teams[m.t1Idx]}</div>
-          <div className="flex items-center gap-1 bg-slate-50 p-1 rounded border shrink-0">
-            <input type="number" min="0" disabled={role !== 'admin'} className="w-8 sm:w-10 h-7 text-center border rounded bg-white font-bold outline-none focus:border-blue-500" value={m.s1} onChange={(e) => handleGroupScoreChange(type, group, m.id, 's1', e.target.value)} />
-            <span className="font-bold text-slate-400">-</span>
-            <input type="number" min="0" disabled={role !== 'admin'} className="w-8 sm:w-10 h-7 text-center border rounded bg-white font-bold outline-none focus:border-blue-500" value={m.s2} onChange={(e) => handleGroupScoreChange(type, group, m.id, 's2', e.target.value)} />
+          <div className="flex-1 text-right text-xs sm:text-sm font-medium truncate text-slate-700" title={teams[m.t1Idx]}>{teams[m.t1Idx]}</div>
+          <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border shrink-0">
+            <ScoreInput value={m.s1} disabled={role !== 'admin'} onChange={(val) => handleGroupScoreChange(type, group, m.id, 's1', val)} />
+            <span className="font-bold text-slate-400 select-none">-</span>
+            <ScoreInput value={m.s2} disabled={role !== 'admin'} onChange={(val) => handleGroupScoreChange(type, group, m.id, 's2', val)} />
           </div>
-          <div className="flex-1 text-left text-xs sm:text-sm font-medium truncate" title={teams[m.t2Idx]}>{teams[m.t2Idx]}</div>
+          <div className="flex-1 text-left text-xs sm:text-sm font-medium truncate text-slate-700" title={teams[m.t2Idx]}>{teams[m.t2Idx]}</div>
         </div>
       ))}
     </div>
@@ -583,11 +644,11 @@ export default function App() {
       <div className="text-xs font-bold text-slate-500 uppercase ml-2">{title}</div>
       <div className={`flex items-center gap-2 rounded px-2 py-1.5 border ml-2 ${w === t1 && t1 ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-transparent'}`}>
         <div className={`flex-1 text-xs sm:text-sm truncate ${w === t1 && t1 ? 'font-bold text-green-700' : 'text-slate-700'}`} title={t1}>{t1 || 'Nhất Bảng A'}</div>
-        <input type="number" min="0" disabled={role !== 'admin' || !t1} value={s1} onChange={e => handleKOScoreChange(type, matchKey, 's1', e.target.value)} className="w-10 h-7 text-center font-bold border rounded outline-none focus:border-blue-500 bg-white" placeholder="0" />
+        <ScoreInput value={s1} disabled={role !== 'admin' || !t1} onChange={(val) => handleKOScoreChange(type, matchKey, 's1', val)} />
       </div>
       <div className={`flex items-center gap-2 rounded px-2 py-1.5 border ml-2 ${w === t2 && t2 ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-transparent'}`}>
         <div className={`flex-1 text-xs sm:text-sm truncate ${w === t2 && t2 ? 'font-bold text-green-700' : 'text-slate-700'}`} title={t2}>{t2 || 'Nhì Bảng B'}</div>
-        <input type="number" min="0" disabled={role !== 'admin' || !t2} value={s2} onChange={e => handleKOScoreChange(type, matchKey, 's2', e.target.value)} className="w-10 h-7 text-center font-bold border rounded outline-none focus:border-blue-500 bg-white" placeholder="0" />
+        <ScoreInput value={s2} disabled={role !== 'admin' || !t2} onChange={(val) => handleKOScoreChange(type, matchKey, 's2', val)} />
       </div>
     </div>
   );
@@ -959,11 +1020,11 @@ export default function App() {
                 <div className="text-center font-black text-yellow-800 uppercase mb-3 flex items-center justify-center gap-2"><Trophy size={20} className="text-yellow-600"/> CHUNG KẾT</div>
                 <div className={`flex items-center gap-2 rounded px-2 py-2 border mb-2 ${koData.champion === koData.sf1Winner && koData.champion ? 'bg-yellow-100 border-yellow-400' : 'bg-gray-50 border-gray-200'}`}>
                   <div className={`flex-1 text-xs sm:text-sm truncate ${koData.champion === koData.sf1Winner && koData.champion ? 'font-bold text-yellow-800' : 'text-gray-700'}`} title={koData.sf1Winner}>{koData.sf1Winner || 'Thắng BK1'}</div>
-                  <input type="number" min="0" disabled={role !== 'admin' || !koData.sf1Winner} value={koState.final.s1} onChange={e => handleKOScoreChange(type, 'final', 's1', e.target.value)} className="w-12 h-8 text-center font-bold border rounded outline-none focus:border-yellow-500 bg-white" placeholder="0" />
+                  <ScoreInput value={koState.final.s1} disabled={role !== 'admin' || !koData.sf1Winner} onChange={(val) => handleKOScoreChange(type, 'final', 's1', val)} />
                 </div>
                 <div className={`flex items-center gap-2 rounded px-2 py-2 border ${koData.champion === koData.sf2Winner && koData.champion ? 'bg-yellow-100 border-yellow-400' : 'bg-gray-50 border-gray-200'}`}>
                   <div className={`flex-1 text-xs sm:text-sm truncate ${koData.champion === koData.sf2Winner && koData.champion ? 'font-bold text-yellow-800' : 'text-gray-700'}`} title={koData.sf2Winner}>{koData.sf2Winner || 'Thắng BK2'}</div>
-                  <input type="number" min="0" disabled={role !== 'admin' || !koData.sf2Winner} value={koState.final.s2} onChange={e => handleKOScoreChange(type, 'final', 's2', e.target.value)} className="w-12 h-8 text-center font-bold border rounded outline-none focus:border-yellow-500 bg-white" placeholder="0" />
+                  <ScoreInput value={koState.final.s2} disabled={role !== 'admin' || !koData.sf2Winner} onChange={(val) => handleKOScoreChange(type, 'final', 's2', val)} />
                 </div>
                 {koData.champion && <div className="mt-4 p-2 bg-gradient-to-r from-yellow-400 to-yellow-600 text-white rounded-lg font-black shadow-md text-sm text-center uppercase animate-pulse">🏆 VÔ ĐỊCH: {koData.champion}</div>}
               </div>
@@ -972,11 +1033,11 @@ export default function App() {
                 <div className="text-center font-bold text-orange-800 uppercase mb-3 flex items-center justify-center gap-2"><Medal size={20} className="text-orange-600"/> Tranh Hạng 3</div>
                 <div className={`flex items-center gap-2 rounded px-2 py-1.5 border mb-2 ${koData.thirdPlace === koData.sf1Loser && koData.thirdPlace ? 'bg-orange-100 border-orange-300' : 'bg-gray-50 border-gray-200'}`}>
                   <div className={`flex-1 text-xs sm:text-sm truncate ${koData.thirdPlace === koData.sf1Loser && koData.thirdPlace ? 'font-bold text-orange-800' : 'text-gray-700'}`} title={koData.sf1Loser}>{koData.sf1Loser || 'Thua BK1'}</div>
-                  <input type="number" min="0" disabled={role !== 'admin' || !koData.sf1Loser} value={koState.third.s1} onChange={e => handleKOScoreChange(type, 'third', 's1', e.target.value)} className="w-10 h-7 text-center font-bold border rounded outline-none focus:border-orange-500 bg-white" placeholder="0" />
+                  <ScoreInput value={koState.third.s1} disabled={role !== 'admin' || !koData.sf1Loser} onChange={(val) => handleKOScoreChange(type, 'third', 's1', val)} />
                 </div>
                 <div className={`flex items-center gap-2 rounded px-2 py-1.5 border ${koData.thirdPlace === koData.sf2Loser && koData.thirdPlace ? 'bg-orange-100 border-orange-300' : 'bg-gray-50 border-gray-200'}`}>
                   <div className={`flex-1 text-xs sm:text-sm truncate ${koData.thirdPlace === koData.sf2Loser && koData.thirdPlace ? 'font-bold text-orange-800' : 'text-gray-700'}`} title={koData.sf2Loser}>{koData.sf2Loser || 'Thua BK2'}</div>
-                  <input type="number" min="0" disabled={role !== 'admin' || !koData.sf2Loser} value={koState.third.s2} onChange={e => handleKOScoreChange(type, 'third', 's2', e.target.value)} className="w-10 h-7 text-center font-bold border rounded outline-none focus:border-orange-500 bg-white" placeholder="0" />
+                  <ScoreInput value={koState.third.s2} disabled={role !== 'admin' || !koData.sf2Loser} onChange={(val) => handleKOScoreChange(type, 'third', 's2', val)} />
                 </div>
               </div>
             </div>
